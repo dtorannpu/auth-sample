@@ -18,14 +18,33 @@ import (
 )
 
 type config struct {
-	JwksURL  string   `env:"JWKS_URL,required"`
-	Audience []string `env:"AUDIENCE,required"`
-	Issuer   string   `env:"ISSUER,required"`
+	jwksURL  string   `env:"JWKS_URL,required"`
+	issuer   string   `env:"ISSUER,required"`
+	audience []string `env:"AUDIENCE,required"`
+}
+
+type jwtConfig struct {
+	issuer   string   `env:"ISSUER,required"`
+	audience []string `env:"AUDIENCE,required"`
+	keyFunc  jwt.Keyfunc
 }
 
 func initJWKS(ctx context.Context, jwksURL string) (keyfunc.Keyfunc, error) {
 
 	return keyfunc.NewDefaultCtx(ctx, []string{jwksURL})
+}
+
+func newJWTMiddleware(cfg jwtConfig) echo.MiddlewareFunc {
+	return echojwt.WithConfig(echojwt.Config{
+		ParseTokenFunc: func(c *echo.Context, auth string) (interface{}, error) {
+			token, err := jwt.Parse(auth, cfg.keyFunc, jwt.WithIssuer(cfg.issuer), jwt.WithAudience(cfg.audience...), jwt.WithExpirationRequired())
+			if err != nil {
+				c.Logger().Error("failed to parse token", "error", err)
+				return nil, echo.ErrUnauthorized
+			}
+			return token, nil
+		},
+	})
 }
 
 func main() {
@@ -43,7 +62,7 @@ func run() error {
 		return fmt.Errorf("環境変数の読み込みに失敗しました: %w", err)
 	}
 
-	jwks, err := initJWKS(ctx, cfg.JwksURL)
+	jwks, err := initJWKS(ctx, cfg.jwksURL)
 	if err != nil {
 		return fmt.Errorf("JWKS初期化失敗: %w", err)
 	}
@@ -52,17 +71,11 @@ func run() error {
 	e.Use(middleware.RequestLogger())
 	e.Use(middleware.Recover())
 
-	config := echojwt.WithConfig(echojwt.Config{
-		ParseTokenFunc: func(c *echo.Context, auth string) (interface{}, error) {
-			token, err := jwt.Parse(auth, jwks.Keyfunc, jwt.WithIssuer(cfg.Issuer), jwt.WithAudience(cfg.Audience...), jwt.WithExpirationRequired())
-			if err != nil {
-				c.Logger().Error("failed to parse token", "error", err)
-				return nil, echo.ErrUnauthorized
-			}
-			return token, nil
-		},
-	})
-	e.Use(config)
+	e.Use(newJWTMiddleware(jwtConfig{
+		issuer:   cfg.issuer,
+		audience: cfg.audience,
+		keyFunc:  jwks.Keyfunc,
+	}))
 
 	e.GET("/", func(c *echo.Context) error {
 		return c.String(200, "Hello, World!")
