@@ -65,43 +65,61 @@ def get_signing_key(
         )
 
 
-async def _verify_token_impl(
-    token: str,
-    settings: Settings,
-    signing_key: PyJWK,
-) -> dict[str, Any]:
-    """トークン検証のコアロジック"""
-    try:
-        jwks = signing_key.key
-        payload = jwt.decode(
-            token,
-            jwks,
-            algorithms=["RS256"],
-            issuer=settings.issuer,
-            audience=settings.audience,
-        )
-        return payload
-    except jwt.ExpiredSignatureError as e:
-        logger.warning(f"Token has expired: {e}")
-        raise HTTPException(status_code=401, detail="Token has expired")
-    except jwt.InvalidIssuerError as e:
-        logger.warning(f"Invalid token issuer: {e}")
-        raise HTTPException(status_code=401, detail="Invalid token issuer")
-    except jwt.InvalidAudienceError as e:
-        logger.warning(f"Invalid token audience: {e}")
-        raise HTTPException(status_code=401, detail="Invalid token audience")
-    except jwt.InvalidSignatureError as e:
-        logger.warning(f"Invalid token signature: {e}")
-        raise HTTPException(status_code=401, detail="Invalid token signature")
-    except jwt.DecodeError as e:
-        logger.warning(f"Token decode error: {e}")
-        raise HTTPException(status_code=401, detail="Token decode error")
+class TokenVerifier:
+    """トークン検証を担当するクラス"""
+
+    def __init__(
+        self,
+        issuer: str,
+        audience: str | list[str],
+        algorithms: list[str] | None = None,
+    ):
+        self.issuer = issuer
+        self.audience = audience
+        self.algorithms = algorithms or ["RS256"]
+
+    def verify(self, token: str, signing_key: PyJWK) -> dict[str, Any]:
+        """トークンの検証を実行"""
+        try:
+            payload = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=self.algorithms,
+                issuer=self.issuer,
+                audience=self.audience,
+            )
+            return payload
+        except jwt.ExpiredSignatureError as e:
+            logger.warning(f"Token has expired: {e}")
+            raise HTTPException(status_code=401, detail="Token has expired")
+        except jwt.InvalidIssuerError as e:
+            logger.warning(f"Invalid token issuer: {e}")
+            raise HTTPException(status_code=401, detail="Invalid token issuer")
+        except jwt.InvalidAudienceError as e:
+            logger.warning(f"Invalid token audience: {e}")
+            raise HTTPException(status_code=401, detail="Invalid token audience")
+        except jwt.InvalidSignatureError as e:
+            logger.warning(f"Invalid token signature: {e}")
+            raise HTTPException(status_code=401, detail="Invalid token signature")
+        except jwt.DecodeError as e:
+            logger.warning(f"Token decode error: {e}")
+            raise HTTPException(status_code=401, detail="Token decode error")
 
 
-async def verify_token(
-    token: Annotated[str, Depends(get_oauth2_scheme)],
+def get_token_verifier(
     settings: Annotated[Settings, Depends(get_settings)],
+) -> TokenVerifier:
+    """TokenVerifierのインスタンスを取得する（依存性注入用）"""
+    return TokenVerifier(
+        issuer=settings.issuer,
+        audience=settings.audience,
+    )
+
+
+def verify_token(
+    token: Annotated[str, Depends(get_oauth2_scheme)],
     signing_key: Annotated[PyJWK, Depends(get_signing_key)],
+    verifier: Annotated[TokenVerifier, Depends(get_token_verifier)],
 ) -> dict[str, Any]:
     """FastAPI 依存性注入版"""
-    return await _verify_token_impl(token, settings, signing_key)
+    return verifier.verify(token, signing_key)

@@ -8,7 +8,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import HTTPException
 from pytest_mock import MockerFixture
 
-from fastapi_sample.auth import _verify_token_impl
+from fastapi_sample.auth import TokenVerifier
 from fastapi_sample.settings import Settings
 
 
@@ -64,8 +64,7 @@ def settings(mock_payload: dict[str, Any]) -> Settings:
     )
 
 
-@pytest.mark.asyncio
-async def test_verify_token_success(
+def test_verify_token_success(
     valid_token: str,
     mock_payload: dict[str, Any],
     rsa_keys: tuple[str, str],
@@ -79,10 +78,11 @@ async def test_verify_token_success(
     mock_signing_key = mocker.MagicMock()
     mock_signing_key.key = public_key
 
-    # 関数を実行（実際のjwt.decodeが動作する）
-    result = await _verify_token_impl(
-        valid_token, settings=settings, signing_key=mock_signing_key
-    )
+    # TokenVerifierの作成
+    verifier = TokenVerifier(issuer=settings.issuer, audience=settings.audience)
+
+    # 関数を実行
+    result = verifier.verify(valid_token, signing_key=mock_signing_key)
 
     # アサーション
     assert result["sub"] == mock_payload["sub"]
@@ -91,8 +91,7 @@ async def test_verify_token_success(
     assert result["aud"] == mock_payload["aud"]
 
 
-@pytest.mark.asyncio
-async def test_verify_token_invalid_token(
+def test_verify_token_invalid_token(
     rsa_keys: tuple[str, str],
     mock_payload: dict[str, Any],
     settings: Settings,
@@ -106,19 +105,19 @@ async def test_verify_token_invalid_token(
     mock_signing_key = mocker.MagicMock()
     mock_signing_key.key = public_key
 
+    # TokenVerifierの作成
+    verifier = TokenVerifier(issuer=settings.issuer, audience=settings.audience)
+
     # HTTPExceptionが発生することを確認（実際のjwt.decodeがエラーを出す）
     with pytest.raises(HTTPException) as exc_info:
-        await _verify_token_impl(
-            invalid_token, settings=settings, signing_key=mock_signing_key
-        )
+        verifier.verify(invalid_token, signing_key=mock_signing_key)
 
     # ステータスコードを確認
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail == "Token decode error"
 
 
-@pytest.mark.asyncio
-async def test_verify_token_invalid_signature(
+def test_verify_token_invalid_signature(
     mock_payload: dict[str, Any],
     rsa_keys: tuple[str, str],
     settings: Settings,
@@ -143,19 +142,19 @@ async def test_verify_token_invalid_signature(
     mock_signing_key = mocker.MagicMock()
     mock_signing_key.key = public_key
 
+    # TokenVerifierの作成
+    verifier = TokenVerifier(issuer=settings.issuer, audience=settings.audience)
+
     # HTTPExceptionが発生することを確認（署名検証エラー）
     with pytest.raises(HTTPException) as exc_info:
-        await _verify_token_impl(
-            wrong_token, settings=settings, signing_key=mock_signing_key
-        )
+        verifier.verify(wrong_token, signing_key=mock_signing_key)
 
     # ステータスコードを確認
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail == "Invalid token signature"
 
 
-@pytest.mark.asyncio
-async def test_verify_token_expired_token(
+def test_verify_token_expired_token(
     mock_payload: dict[str, Any],
     rsa_keys: tuple[str, str],
     settings: Settings,
@@ -176,19 +175,19 @@ async def test_verify_token_expired_token(
     mock_signing_key = mocker.MagicMock()
     mock_signing_key.key = public_key
 
+    # TokenVerifierの作成
+    verifier = TokenVerifier(issuer=settings.issuer, audience=settings.audience)
+
     # HTTPExceptionが発生することを確認（期限切れエラー）
     with pytest.raises(HTTPException) as exc_info:
-        await _verify_token_impl(
-            expired_token, settings=settings, signing_key=mock_signing_key
-        )
+        verifier.verify(expired_token, signing_key=mock_signing_key)
 
     # ステータスコードを確認
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail == "Token has expired"
 
 
-@pytest.mark.asyncio
-async def test_verify_token_invalid_issuer(
+def test_verify_token_invalid_issuer(
     mock_payload: dict[str, Any],
     rsa_keys: tuple[str, str],
     settings: Settings,
@@ -209,19 +208,19 @@ async def test_verify_token_invalid_issuer(
     mock_signing_key = mocker.MagicMock()
     mock_signing_key.key = public_key
 
+    # TokenVerifierの作成
+    verifier = TokenVerifier(issuer=settings.issuer, audience=settings.audience)
+
     # HTTPExceptionが発生することを確認（issuerエラー）
     with pytest.raises(HTTPException) as exc_info:
-        await _verify_token_impl(
-            invalid_issuer_token, settings=settings, signing_key=mock_signing_key
-        )
+        verifier.verify(invalid_issuer_token, signing_key=mock_signing_key)
 
     # ステータスコードを確認
     assert exc_info.value.status_code == 401
     assert exc_info.value.detail == "Invalid token issuer"
 
 
-@pytest.mark.asyncio
-async def test_verify_token_invalid_audience(
+def test_verify_token_invalid_audience(
     mock_payload: dict[str, Any],
     rsa_keys: tuple[str, str],
     settings: Settings,
@@ -242,11 +241,12 @@ async def test_verify_token_invalid_audience(
     mock_signing_key = mocker.MagicMock()
     mock_signing_key.key = public_key
 
+    # TokenVerifierの作成
+    verifier = TokenVerifier(issuer=settings.issuer, audience=settings.audience)
+
     # HTTPExceptionが発生することを確認（audienceエラー）
     with pytest.raises(HTTPException) as exc_info:
-        await _verify_token_impl(
-            invalid_audience_token, settings=settings, signing_key=mock_signing_key
-        )
+        verifier.verify(invalid_audience_token, signing_key=mock_signing_key)
 
     # ステータスコードを確認
     assert exc_info.value.status_code == 401
