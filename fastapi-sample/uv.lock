@@ -3,7 +3,7 @@ revision = 3
 requires-python = ">=3.14"
 
 [options]
-exclude-newer = "2026-03-29T06:05:17.6368887Z"
+exclude-newer = "2026-03-29T06:06:49.0765306Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -248,7 +248,6 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi", extra = ["standard"] },
     { name = "pyjwt", extra = ["crypto"] },
-    { name = "ruff" },
 ]
 
 [package.dev-dependencies]
@@ -264,7 +263,6 @@ dev = [
 requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = "==0.135.2" },
     { name = "pyjwt", extras = ["crypto"], specifier = "==2.12.1" },
-    { name = "ruff", specifier = ">=0.15.4" },
 ]
 
 [package.metadata.requires-dev]
